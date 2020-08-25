@@ -42,6 +42,7 @@ package com.android.bluetooth.mapclient;
 
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothMapClient;
 import android.bluetooth.BluetoothProfile;
@@ -58,7 +59,6 @@ import android.util.Log;
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
-import com.android.bluetooth.map.BluetoothMapbMessageMime;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IState;
 import com.android.internal.util.State;
@@ -69,6 +69,7 @@ import com.android.vcard.VCardProperty;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -346,9 +347,7 @@ final class MceStateMachine extends StateMachine {
     void setDefaultMessageType(SdpMasRecord sdpMasRecord) {
         int supportedMessageTypes = sdpMasRecord.getSupportedMessageTypes();
         synchronized (mDefaultMessageType) {
-            if ((supportedMessageTypes & SdpMasRecord.MessageType.MMS) > 0) {
-                mDefaultMessageType = Bmessage.Type.MMS;
-            } else if ((supportedMessageTypes & SdpMasRecord.MessageType.SMS_CDMA) > 0) {
+            if ((supportedMessageTypes & SdpMasRecord.MessageType.SMS_CDMA) > 0) {
                 mDefaultMessageType = Bmessage.Type.SMS_CDMA;
             } else if ((supportedMessageTypes & SdpMasRecord.MessageType.SMS_GSM) > 0) {
                 mDefaultMessageType = Bmessage.Type.SMS_GSM;
@@ -472,11 +471,6 @@ final class MceStateMachine extends StateMachine {
                     if (mDevice.equals(message.obj)) {
                         transitionTo(mDisconnecting);
                     }
-                    break;
-
-                case MSG_MAS_DISCONNECTED:
-                    deferMessage(message);
-                    transitionTo(mDisconnecting);
                     break;
 
                 case MSG_OUTBOUND_MESSAGE:
@@ -631,12 +625,9 @@ final class MceStateMachine extends StateMachine {
             }
             ArrayList<com.android.bluetooth.mapclient.Message> messageListing = request.getList();
             if (messageListing != null) {
-                // Message listings by spec arrive ordered newest first but we wish to broadcast as
-                // oldest first. Iterate in reverse order so we initiate requests oldest first.
-                for (int i = messageListing.size() - 1; i >= 0; i--) {
-                    com.android.bluetooth.mapclient.Message msg = messageListing.get(i);
+                for (com.android.bluetooth.mapclient.Message msg : messageListing) {
                     if (DBG) {
-                        Log.d(TAG, "getting message for handle " + msg.getHandle());
+                        Log.d(TAG, "getting message ");
                     }
                     // A message listing coming from the server should always have up to date data
                     mMessages.put(msg.getHandle(), new MessageMetadata(msg.getHandle(),
@@ -674,7 +665,6 @@ final class MceStateMachine extends StateMachine {
             switch (message.getType()) {
                 case SMS_CDMA:
                 case SMS_GSM:
-                case MMS:
                     if (DBG) {
                         Log.d(TAG, "Body: " + message.getBodyContent());
                     }
@@ -715,12 +705,6 @@ final class MceStateMachine extends StateMachine {
                         intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_NAME,
                                 originator.getDisplayName());
                     }
-                    if (message.getType() == Bmessage.Type.MMS) {
-                        BluetoothMapbMessageMime mmsBmessage = new BluetoothMapbMessageMime();
-                        mmsBmessage.parseMsgPart(message.getBodyContent());
-                        intent.putExtra(android.content.Intent.EXTRA_TEXT,
-                                mmsBmessage.getMessageAsText());
-                    }
                     // Only send to the current default SMS app if one exists
                     String defaultMessagingPackage = Telephony.Sms.getDefaultSmsPackage(mService);
                     if (defaultMessagingPackage != null) {
@@ -728,6 +712,8 @@ final class MceStateMachine extends StateMachine {
                     }
                     mService.sendBroadcast(intent, android.Manifest.permission.RECEIVE_SMS);
                     break;
+
+                case MMS:
                 case EMAIL:
                 default:
                     Log.e(TAG, "Received unhandled type" + message.getType().toString());

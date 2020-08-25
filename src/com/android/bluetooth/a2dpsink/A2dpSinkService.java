@@ -413,8 +413,7 @@ public class A2dpSinkService extends ProfileService {
         if (state == StackEvent.AUDIO_STATE_STARTED) {
             mA2dpSinkStreamHandler.obtainMessage(
                     A2dpSinkStreamHandler.SRC_STR_START).sendToTarget();
-        } else if (state == StackEvent.AUDIO_STATE_STOPPED
-                || state == StackEvent.AUDIO_STATE_REMOTE_SUSPEND) {
+        } else if (state == StackEvent.AUDIO_STATE_STOPPED) {
             mA2dpSinkStreamHandler.obtainMessage(
                     A2dpSinkStreamHandler.SRC_STR_STOP).sendToTarget();
         }
